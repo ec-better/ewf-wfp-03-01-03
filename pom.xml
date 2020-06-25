@@ -10,11 +10,11 @@
     <artifactId>ewf-python-parent</artifactId>
     <version>1.2</version>
   </parent>
-  <description>Smoothed & gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
+  <description>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
   <version>0.1</version>
   <properties>
-    <summary>Smoothed & gap-filled Sentinel-3 OLCI Level-2 Land Products</summary>
-    <description>Smoothed & gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
+    <summary>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</summary>
+    <description>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
     <community>ec-better</community>
     <yumRepo>ec-better</yumRepo>
   </properties>
