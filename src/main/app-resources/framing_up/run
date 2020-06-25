@@ -1,13 +1,15 @@
 #!/opt/anaconda/envs/env_ewf_wfp_03_01_03/bin/python
 #########
-## This node recieves a comma seperated list of input references 
-## GDAL opens and does tiling 
-## Saves tiles in pickle format
+## This node recieves a comma seperated list of input references - various tiles 
+## GDAL opens and get the GeoTransform data per tile
+## Groups tiles according to geometry and sort by date 
+## publishes each group as a panda DataFrame into a pickle file format
 #########
 import os
 import sys
 import string
 import atexit
+import gdal
 
 import cioppy 
 ciop = cioppy.Cioppy()
@@ -47,7 +49,11 @@ def main():
                            data_pipeline_parameters['api_key'])
 
     os.chdir(ciop.tmp_dir)
- 
+    ### Temporary value for test
+    path_to_store='https://store.terradue.com/ppishehvar/_results/workflows/ec_better_ewf_wfp_03_01_01_ewf_wfp_03_01_01_0_2/run/1e631064-b158-11ea-bbe6-0242ac110003/0013082-200518181542206-oozie-oozi-W/9a2364b0-51ef-4a2b-a397-a0e0c28459aa/'
+    
+    
+    
     references = []
         
     for input in sys.stdin:
@@ -56,19 +62,19 @@ def main():
         
 #To be modified when input data pipeline is configured        
     data_pipeline_results = pd.DataFrame()
+    input_tile=dict()
     for index, end_point in enumerate(references):
         ciop.log('INFO', 'Getting metadata for {}'.format(end_point)) 
-
-
-#        temp_df = pd.DataFrame.from_dict(ciop.search(end_point=end_point,
-#                                                     params=[],
-#                                                     output_fields='startdate,title,wkt,enddate', 
-#                                                     model='EOP',
-#                                                     timeout='60000',
-#                                                     creds=creds))
-
-        temp_df = pd.DataFrame({'enclosure':'{}'.format(end_point),'title':'{}'.format(end_point.split('/')[-1].split('.')[0])},index=[index])
-        data_pipeline_results = data_pipeline_results.append(temp_df, ignore_index=True)        
+        input_tile['tile'] = end_point
+        input_tile['title'] = end_point.split('.')[0]
+        input_tile['enclosure'] = '{}/{}'.format(path_to_store,end_point)
+        vsi_ds=get_vsi_url(input_tile['enclosure'],data_pipeline_parameters['username'],data_pipeline_parameters['api_key'])
+        ds=gdal.Open(vsi_ds)
+        gt = ds.GetGeoTransform()
+        input_tile['Upper_Left']=gdal.ApplyGeoTransform(gt,0,0)
+        input_tile['Lower_Right']=gdal.ApplyGeoTransform(gt,ds.RasterXSize,ds.RasterYSize)
+        data_pipeline_results=data_pipeline_results.append(input_tile, ignore_index=True)
+       
     data_pipeline_results = data_pipeline_results.merge(data_pipeline_results.apply(lambda row: analyse_row(row), axis=1),
                                                         left_index=True,
                                                         right_index=True)
@@ -76,25 +82,23 @@ def main():
 
 
 
-# Tiles size 1917x1917 devided by 3 generates 9 sub_tiles size 639x639
-    tiling_factor = 3
-    sub_tiles = get_sub_tiles(data_pipeline_results, data_pipeline_parameters, tiling_factor)
-    ciop.log('INFO', 'Number of subtiles: {}'.format(len(sub_tiles)))
+### Convert gps coordinates into comma seprated string to be inter-comparable 
+    data_pipeline_results['Upper_Left']=[','.join(map(str, l)) for l in data_pipeline_results['Upper_Left']]
+    data_pipeline_results['Lower_Right']=[','.join(map(str, l)) for l in data_pipeline_results['Lower_Right']]
+    origin_points = data_pipeline_results['Upper_Left'].unique().tolist()
+
+### Group tiles by geometry and sort by date
+    for origin in origin_points:
+        tile_stack=data_pipeline_results[data_pipeline_results['Upper_Left'] == origin].reset_index(drop=True)
+        if tile_stack['Lower_Right'].unique():
+            tile_stack.sort_values(by=['jday'],inplace=True, ignore_index=True)
+            tile_stack_name=tile_stack.iloc[0]['title']
+            tile_stack.to_pickle(os.path.join(ciop.tmp_dir,'{}.pickle'.format(tile_stack_name)), 'gzip')
+            ciop.log('INFO', 'Publish {}.pickle'.format(tile_stack_name))
+            ciop.publish(os.path.join(ciop.tmp_dir, '{}.pickle'.format(tile_stack_name)))
     
-    for index, sub_tile in enumerate(sub_tiles.sub_tile.unique()):
-        
-        print(index,sub_tile)
-    
-        sub_tiles[sub_tiles['sub_tile'] == sub_tile].sort_values(by=['day']).reset_index().to_pickle(os.path.join(ciop.tmp_dir,
-                                                                                                                  '{}.pickle'.format(sub_tile)), 'gzip')
-        #Testing condition to reduce tiles
-        #if index >= 1: continue
-        
-        ciop.log('INFO', 'Publish {}.pickle'.format(sub_tile))
-        ciop.publish(os.path.join(ciop.tmp_dir, '{}.pickle'.format(sub_tile)))
 
 
-    
 
 
 try:

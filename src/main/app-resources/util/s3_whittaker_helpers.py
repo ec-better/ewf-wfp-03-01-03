@@ -82,13 +82,15 @@ def get_vsi_url(enclosure, user, api_key):
     return url 
 
 def analyse_row(row):
-#From title in properties file get the date and Julian day     
+    
     series = dict()
     
-    #series['day'] = row['title'][11:19]
     series['day'] = row['title'][16:24]
     series['jday'] = '{}{}'.format(datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_year,
                                    "%03d"%datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_yday)
+    
+    return pd.Series(series)
+
     
     return pd.Series(series)
 
