@@ -233,24 +233,25 @@ def whittaker(ts, date_mask, band_to_analyse):
         list of floating values. The first value is the s smoothing parameter
     """
     if band_to_analyse == "NDVI":
-        nan_value = -3000
+        nan_value = 255
     else:
         nan_value = 0
         
+    ts_double=np.array(ts,dtype='double')
     mask = np.ones(len(ts))
     mask[ts==nan_value]=0
     # the output is an  array full of np.nan by default
     data_smooth = np.array([nan_value]*len(date_mask))
     
     # check if all values are np.npn
-    if not mask.all():
+    if (mask==0).all()==False:
 
         w=np.array((ts!=nan_value)*1,dtype='double')
         lrange = array.array('d', np.linspace(-2, 4, 61))
         
         try: 
             # apply whittaker filter with V-curve
-            zv, loptv = ws2doptvp(ts, w, lrange, p=0.90)
+            zv, loptv = ws2doptvp(ts_double, w, lrange, p=0.90)
             #parameters needed for the interpolation step
            
             dvec = np.zeros(len(date_mask))
@@ -269,7 +270,7 @@ def whittaker(ts, date_mask, band_to_analyse):
             
             # Calculates Lag-1 correlation
             
-            lag1 = lag1corr(ts[:-1], ts[1:], nan_value)
+            lag1 = lag1corr(ts_double[:-1], ts_double[1:], nan_value)
             
             
 

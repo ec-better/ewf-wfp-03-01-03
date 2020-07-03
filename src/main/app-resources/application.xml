@@ -14,6 +14,11 @@
     </jobTemplate>
     <jobTemplate id="filtering">
       <streamingExecutable>/application/filtering/run</streamingExecutable>
+        <defaultParameters>
+            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">ppishehvar</parameter>
+            <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
+            <parameter id='delta_time_output' title='Delta Day' abstract='Delta Day for interpolated results' scope="runtime"></parameter>
+       </defaultParameters>
       <defaultJobconf>
         <property id="mapred.task.timeout">9900000000</property>
       </defaultJobconf>

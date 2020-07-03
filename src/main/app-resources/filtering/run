@@ -1,9 +1,9 @@
 #!/opt/anaconda/envs/env_ewf_wfp_03_01_03/bin/python
 ##########
-# This node recieves each sub-tile in pickle format 
-# containing 6 bands: 'NDVI', 'OGVI', 'OCTI', 'Land mask', 'Cloud mask', 'OGVI fail mask' 
-# Smooth & gap-filters each subtile for NDVI, OGVI and OTCI 
-# Saves the output NDVI, OGVI and OTCI subtiles  
+# This node recieves panda dataframe of  tile time-seires in pickle format 
+# each tile containing 6 bands: 'NDVI', 'OGVI', 'OCTI', 'Land mask', 'Cloud mask', 'OGVI fail mask' 
+# Smooth & gap-filters each subtile for NDVI, OGVI or OTCI based on the name of the pickle  
+# Saves the output NDVI, OGVI or OTCI interpolated results + Original Data + Mask   
 import os
 import sys
 import string
@@ -43,28 +43,295 @@ def main():
     data_pipeline_parameters['username'] = ciop.getparam('_T2Username')
     data_pipeline_parameters['api_key'] = ciop.getparam('_T2ApiKey')
 
-    creds = '{}:{}'.format(data_pipeline_parameters['username'],
-                           data_pipeline_parameters['api_key'])
-
-   
+    
+    #Open each pickle and process the time-series 
     for input in sys.stdin:
-        ciop.log('INFO', 'Processing tile {}'.format(input.rstrip()))
+        tile_pkl = ciop.copy(input.rstrip(),ciop.tmp_dir,extract=False)
+        tile_series = pd.read_pickle(tile_pkl, 'gzip')
+        ciop.log('DEBUG', 'Processing local tile {}'.format(tile_pkl))
         
-        local_subtile = ciop.copy(input.rstrip(),
-                                  ciop.tmp_dir,
-                                  extract=False)
+        #Name of the pickle determines the band ie. NDVI ,OGVI ot OTCI
+        band_to_process = tile_pkl[:4]
         
-        ciop.log('INFO', 'Processing local tile {}'.format(local_subtile))
+        dates = tile_series['jday']
+        # the generate_dates function creates a list of days with a delta time=1
+        full_dates = generate_dates(startdate_string=list(dates)[0], enddate_string=list(dates)[-1], delta=1)
+        # Parameter to be set in metadata 
+        full_period = '{}_{}'.format(fromjulian(full_dates[0]).strftime('%Y%m%d'),fromjulian(full_dates[-1]).strftime('%Y%m%d'))
+        date_mask = np.array([True if x in list(dates) else False for x in full_dates])
+        
+        ciop.log('DEBUG','full dates = {0} while original input dates = {1}'.format(len(full_dates), len(dates)))
+        ciop.log('DEBUG','full period of processing is : {}'.format(full_period))
+        
+        #########Read input data & stack them into a 3D array
+        ####Find out bands description:
+        temp_des = gdal.Open(get_vsi_url(tile_series.iloc[0]['enclosure'], 
+                                    data_pipeline_parameters['username'], 
+                                    data_pipeline_parameters['api_key']))
+        bands = dict()
+        for band in range(src_ds.RasterCount):
+        band += 1
+        bands[temp_des.GetRasterBand(band).GetDescription()] = band 
+        geo_transform = temp_des.GetGeoTransform()
+        projection = temp_des.GetProjection()
+        temp_des = None
+        ####
+        
+        
+        
+        data = []
+        mask = []
+        for index, row in tile_series.iterrows():
+            
+            enclosure_vsi_url = get_vsi_url(row.enclosure, 
+                                    data_pipeline_parameters['username'], 
+                                    data_pipeline_parameters['api_key'])
+            data_gdal = gdal.Open(enclosure_vsi_url)
+            if 
+            data.append(data_gdal.GetRasterBand(bands[band_to_process]).ReadAsArray())
+            land_mask = data_gdal.GetRasterBand(bands['Land mask']).ReadAsArray()
+            cloud_mask = data_gdal.GetRasterBand(bands['Cloud mask']).ReadAsArray()
+            #noData 255
+            mask.append( (land_mask==1) & (cloud_mask==0) ) # if mask is true data is valid
 
-        sub_tile = pd.read_pickle(local_subtile, 'gzip')
+            
+            
+        data_stack = np.stack(data,axis=2)
+        validity_mask_stack = np.stack(mask,axis=2)
+        ciop.log('DEBUG','{} complete data stack shape = {}'.format(data_stack.shape))
+        
+        #########Run Whittaker filter 
+        
+        result = np.apply_along_axis(whittaker, 2, data_stack, validity_mask_stack, band_to_process)
+        ciop.log('DEBUG','result.shape = {}'.format(result.shape))
+        
+        
+        
+        
+        #########Save filtered result to seperate GeoTiff file per delta_day 
+        ###Three types of output GeoTiff generated: Sgrid & Lag1 & ORI|NAT|SYN data 
+        
+        ###Creating s-grid GeoTiff
+        
+        ciop.log('INFO', 'Create s-grid GeoTIFF product for local tile {}'.format(tile_pkl))
+
+        band_number = 1
+        cols = result.shape[0]
+        rows = result.shape[1]
+
+        print('S-grid', band_number, cols, rows)
+
+        drv = gdal.GetDriverByName('GTiff')
+
+        ds = drv.Create('temp_sgrid_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), 
+                        cols, rows, 
+                        band_number, 
+                        gdal.GDT_Int16)
+
+        log10_scale100 = lambda x: 0 if np.isnan(x) else(0 if x<=0 else 100*np.log10(x))
+        vfunc_log_scale100 = np.vectorize(log10_scale100)
+        S_grid = vfunc_log_scale100(result[:,:,0])
+        
+        ds.SetGeoTransform(geo_transform)
+        ds.SetProjection(projection)
+        ds.GetRasterBand(1).WriteArray(S_grid, 0, 0)
+        ds.GetRasterBand(1).SetDescription('Sgrid')
+        
+        ###Added Metadata even for lag1 , Sgrid
+        metadata = dict()
+        metadata['full_period'] = full_period
+        ds.GetRasterBand(1).SetMetadata(metadata)
+        
+        ds.FlushCache()
+        
+        
+        
+        ### Creating the lag1corr GeoTiff
+        
+        ciop.log('INFO', 'Create the Lag-1 GeoTIFF product for local tile {}'.format(tile_pkl))
+
+        band_number = 1
+        cols = result.shape[0]
+        rows = result.shape[1]
+
+        print('Lag-1', band_number, cols, rows)
+        drv = gdal.GetDriverByName('GTiff')
+
+        ds = drv.Create('temp_lag1_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), 
+                        cols, rows, 
+                        band_number, 
+                        gdal.GDT_Float32)
 
 
-        ciop.log('INFO', 'Do something')
         
-        # add processing steps
+        ds.SetGeoTransform(geo_transform)
+        ds.SetProjection(projection)
+        ds.GetRasterBand(1).WriteArray(result[:,:,1], 0, 0)
+        ds.GetRasterBand(1).SetDescription('lag1')
         
-        ciop.log('INFO', 'Publish something')
-        ciop.publish(output_name + '.tif', mode='silent')
+        ###Added Metadata even for lag1 , Sgrid
+        metadata = dict()
+        metadata['full_period'] = full_period
+        ds.GetRasterBand(1).SetMetadata(metadata)
+        ds.FlushCache()
+
+        
+        
+        
+        ### Creating original values GeoTiff ###
+        ciop.log('INFO', 'Create the original {} GeoTIFF product for local tile {}'.format(band_to_process, tile_pkl))
+        band_number = data_stack.shape[2]
+        cols = data_stack.shape[0]
+        rows = data_stack.shape[1]
+
+        ciop.log('DEBUG', ' '.join(['original values', str(band_number), str(cols), str(rows)]))
+
+        drv = gdal.GetDriverByName('GTiff')
+
+        ds = drv.Create('temp_original_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),
+                        cols, rows, 
+                        band_number, 
+                        gdal.GDT_Int16)
+
+        ds.SetGeoTransform(geo_transform)
+        ds.SetProjection(projection)
+        ds.FlushCache()
+        
+        ds = gdal.Open('temp_original_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), gdal.OF_UPDATE)
+
+        for index, band in enumerate(range(0, band_number)):
+
+            
+            product_date = datetime.datetime.strptime(dates[index], '%Y%j').date()
+            date = '{}{:02d}{:02d}'.format(product_date.year, product_date.month, product_date.day)
+            
+            metadata = dict()
+            metadata['date'] = date
+            metadata['jdate'] = dates[index]
+            metadata['full_period'] = full_period
+            
+            #ORIGINAL band
+            
+            ds.GetRasterBand(index + 1).WriteArray(data_stack[:,:,index], 0, 0)
+            ds.GetRasterBand(index + 1).SetDescription(dates[index])
+            ds.GetRasterBand(index + 1).SetMetadata(metadata)
+
+        ds.FlushCache()
+        
+        ### Creating mask values GeoTiff ###
+        ciop.log('INFO', 'Create the mask {} GeoTIFF product for local tile {}'.format(band_to_process, tile_pkl))
+        band_number = mask_stack.shape[2]
+        cols = mask_stack.shape[0]
+        rows = mask_stack.shape[1]
+
+        ciop.log('DEBUG', ' '.join(['mask values', str(band_number), str(cols), str(rows)]))
+
+        drv = gdal.GetDriverByName('GTiff')
+
+        ds = drv.Create('temp_mask_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),
+                        cols, rows, 
+                        band_number, 
+                        gdal.GDT_Int16)
+
+        ds.SetGeoTransform(geo_transform)
+        ds.SetProjection(projection)
+        ds.FlushCache()
+        
+        ds = gdal.Open('temp_mask_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), gdal.OF_UPDATE)
+
+        for index, band in enumerate(range(0, band_number)):
+        
+            product_date = datetime.datetime.strptime(dates[index], '%Y%j').date()
+            date = '{}{:02d}{:02d}'.format(product_date.year, product_date.month, product_date.day)
+            
+            metadata = dict()
+            metadata['date'] = date
+            metadata['jdate'] = dates[index]
+            metadata['full_period'] = full_period
+
+            ds.GetRasterBand(index + 1).WriteArray(validity_mask_stack[:,:,index], 0, 0)
+            ds.GetRasterBand(index + 1).SetDescription('Validity mask on {}'.format(dates[index]))
+            ds.GetRasterBand(index + 1).SetMetadata(metadata)
+
+        ds.FlushCache()
+        
+        ### Creating GeoTiff ###
+        
+        ciop.log('INFO', 'Create the {} GeoTIFF product for local tile {}'.format(band_to_process, tile_pkl))
+        
+        out_bands = range(0, result.shape[2]-2, delta_day)
+        
+        band_number = len(out_bands)
+        cols = result.shape[0]
+        rows = result.shape[1]
+
+        ciop.log('DEBUG', ' '.join([str(band), str(band_number), str(cols), str(rows)]))
+
+        drv = gdal.GetDriverByName('GTiff')
+
+        ds = drv.Create('temp_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), 
+                        cols, rows, 
+                        band_number, 
+                        gdal.GDT_Int16)
+
+        ds.SetGeoTransform(geo_transform)
+        ds.SetProjection(projection)
+        ds.FlushCache()
+        
+        ds = gdal.Open('temp_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), gdal.OF_UPDATE)
+
+        delta_day_index=0
+        
+        for index in out_bands:
+            
+            ciop.log('DEBUG', '{} initial number of bands: {}'.format(band_to_process,ds.RasterCount))
+            
+            ciop.log('DEBUG', 'index : {}'.format(index))
+            
+            product_date = datetime.datetime.strptime(full_dates[index], '%Y%j').date()
+            date = '{}{:02d}{:02d}'.format(product_date.year, product_date.month, product_date.day)
+            band_is_interpolated = 'False' if full_dates[index] in list(dates) else 'True'
+            
+
+            metadata = dict()
+            metadata['date'] = date
+            metadata['jdate'] = full_dates[index]
+            metadata['band_is_interpolated'] = band_is_interpolated
+            metadata['full_period'] = full_period
+            delta_day_index += 1
+            
+            ciop.log('DEBUG', 'band index {}'.format(delta_day_index))
+            
+            ### NAT & SYN bands also scaled if value!=noData
+
+            ds.GetRasterBand(delta_day_index).WriteArray(result[:,:,index + 2], 0, 0)
+            ds.GetRasterBand(delta_day_index).SetDescription(full_dates[index])
+            ds.GetRasterBand(delta_day_index).SetMetadata(metadata)
+        
+        ciop.log('DEBUG', '{} number of bands: {}'.format(band_to_process,ds.RasterCount))
+        
+        ds.FlushCache()
+        
+        if band_to_process == 'NDVI':
+            no_data=-3000
+        else:
+            no_data=0
+            
+        for file,nodata in dict([('s_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)), 0),
+                                   ('lag1_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),0),
+                                   ('{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),no_data),
+                                   ('original_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),no_data),
+                                   ('mask_{}_{}.tif'.format(band_to_process, os.path.basename(tile_pkl)),None)]).items():
+            
+            cog('temp_{}'.format(file),file,nodata)
+        
+            ciop.log('INFO', 'Publish {}'.format(file))
+            ciop.publish(os.path.join(ciop.tmp_dir, file), metalink=True)
+
+
+
+        
+        
 
 try:
     main()
