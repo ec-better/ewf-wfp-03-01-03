@@ -85,7 +85,8 @@ def analyse_row(row):
     
     series = dict()
     
-    series['day'] = row['title'][16:24]
+    #series['day'] = row['title'][16:24]
+    series['day'] = ''.join(row['startdate'].split('T')[0].split('-'))
     series['jday'] = '{}{}'.format(datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_year,
                                    "%03d"%datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_yday)
     
