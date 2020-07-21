@@ -4,15 +4,13 @@
     <jobTemplate id="framing_up">
       <streamingExecutable>/application/framing_up/run</streamingExecutable>
        <defaultParameters>
-           <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime"></parameter>
-           <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
-           <parameter id='input_endpoint' title='Input endpoint' abstract='Data pipeline to select input products from' scope="runtime"></parameter>
-           <parameter id='series_start_date' title='Series startdate' abstract='sereies startdate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime"></parameter>
-           <parameter id='series_enddate' title='Series enddate' abstract='sereies enddate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime"></parameter>
-           <parameter id='tile_level' title='Tiling level' abstract='Tiling level' scope="runtime"></parameter>
-           <parameter id='tile_column' title='Tile column' abstract='Tile column' scope="runtime"></parameter>
-           <parameter id='tile_row' title='Tile row' abstract='Tile row' scope="runtime"></parameter>
-           <parameter id='track' title='Product track' abstract='Product track 3-zero-padded (i.e. 007 or 025 or 135)' scope="runtime"></parameter>
+           <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">better-wfp-03-01-03</parameter>
+           <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime">AKCp5ekcV3h4E4ePJ1b1yHSoqB4ZpFUkmYrTg6KSY5CPuaUiFhnvFtoohbgP9zZ9eebkQKkoA</parameter>
+           <parameter id='input_endpoint' title='Input endpoint' abstract='Data pipeline to select input products from' scope="runtime">https://catalog.terradue.com/better-wfp-03-01-01/search</parameter>
+           <parameter id='series_start_date' title='Series startdate' abstract='sereies startdate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-01T00:00Z</parameter>
+           <parameter id='series_enddate' title='Series enddate' abstract='sereies enddate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-02-28T23:59:59.99Z</parameter>
+           <parameter id='wkt' title='wkt' abstract='Area of Interest' scope="runtime"></parameter>
+           <parameter id='delta_dey' title='delta_dey' abstract='Day Distance between outputs' scope="runtime">5</parameter>
        </defaultParameters>
        <defaultJobconf>
     	<property id="ciop.job.max.tasks">1</property>
@@ -22,7 +20,7 @@
     <jobTemplate id="filtering">
       <streamingExecutable>/application/filtering/run</streamingExecutable>
         <defaultParameters>
-            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">ppishehvar</parameter>
+            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime"></parameter>
             <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
             <parameter id='delta_time_output' title='Ouput Delta Day' abstract='Delta Day for interpolated results' scope="runtime"></parameter>
        </defaultParameters>

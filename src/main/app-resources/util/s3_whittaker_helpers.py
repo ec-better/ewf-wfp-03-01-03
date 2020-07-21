@@ -84,16 +84,15 @@ def get_vsi_url(enclosure, user, api_key):
 def analyse_row(row):
     
     series = dict()
-    
-    #series['day'] = row['title'][16:24]
+
     series['day'] = ''.join(row['startdate'].split('T')[0].split('-'))
     series['jday'] = '{}{}'.format(datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_year,
                                    "%03d"%datetime.datetime.strptime(series['day'], '%Y%m%d').timetuple().tm_yday)
     
-    return pd.Series(series)
-
+    series['col-row'] = '{}-{}'.format(row['title'].split('C:')[1][:2],row['title'].split('R:')[1][:2])
     
     return pd.Series(series)
+
 
 def analyse_merge_row(row, band_to_process):
     
