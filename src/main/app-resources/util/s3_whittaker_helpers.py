@@ -20,54 +20,6 @@ import geopandas as gpd
 
 
 
-def get_sub_tiles(data_pipeline_results, pipeline_parameters, tiling_factor):
-    
-    sub_tiles = pd.DataFrame()
-
-    for index, entry in data_pipeline_results.iterrows():
-
-        print(entry.jday)
-
-        src_ds = gdal.Open(get_vsi_url(entry.enclosure, 
-                                       pipeline_parameters['username'], 
-                                       pipeline_parameters['api_key']))
-
-
-        step_x = src_ds.RasterXSize // tiling_factor
-        step_y = src_ds.RasterYSize // tiling_factor
-
-        for x in range(0, src_ds.RasterXSize // step_x):
-
-                cols = step_x
-                start_x = x * step_x 
-
-
-                for y in range(0, src_ds.RasterYSize // step_y):
-
-                    temp_dict = dict()
-
-                    rows = step_y
-                    start_y = y * step_y
-                    
-                    #temp_dict['sub_tile'] = 'tile_{}_{}_{}'.format(x, y, entry.title[38:44])
-                    temp_dict['sub_tile'] = 'tile_{}_{}_{}'.format(x, y, entry.title[-7:])
-                    temp_dict['start_x'] = start_x
-                    temp_dict['start_y'] = start_y
-                    temp_dict['cols'] = cols
-                    temp_dict['rows'] = rows
-                    #temp_dict['self'] = entry.self
-                    #temp_dict['title'] = entry.title
-                    temp_dict['day'] = entry.day
-                    temp_dict['jday'] = entry.jday
-                    temp_dict['enclosure'] = entry.enclosure
-
-                    pd.Series(temp_dict)
-
-                    sub_tiles = sub_tiles.append(pd.Series(temp_dict), ignore_index=True)  
-
-                    #ds_mem = None
-    print('Done!')
-    return sub_tiles
 
 def get_vsi_url(enclosure, user, api_key):
     
@@ -94,96 +46,27 @@ def analyse_row(row):
     return pd.Series(series)
 
 
-def analyse_merge_row(row, band_to_process):
+
+def analyse_gps(row, user, api_key):
+            
+    enclosure_vsi_url = get_vsi_url(row.enclosure, 
+                                    user, 
+                                    api_key)
+    data_gdal = gdal.Open(enclosure_vsi_url)
     
+    ulx, xres, xskew, uly, yskew, yres  = data_gdal.GetGeoTransform()
+    lrx = ulx + (data_gdal.RasterXSize * xres)
+    lry = uly + (data_gdal.RasterYSize * yres)
+
     series = dict()
 
-    if 's_' in row.enclosure:
-        output_type = 's'
-    
-    elif 'original_{}'.format(band_to_process) in row.enclosure:
-        output_type = 'original_{}'.format(band_to_process)
-    
-    elif 'lag1_{}'.format(band_to_process) in row.enclosure:
-        output_type = 'lag1'
-    
-    elif 'mask_{}'.format(band_to_process) in row.enclosure:
-        output_type = 'mask'
-        
-    else: 
-        output_type = band_to_process
-
-    series['output_type'] = output_type
-    series['tile'] = os.path.basename(row.enclosure).split('_')[-1].split('.')[0]
-    return pd.Series(series)    
-
-def analyse_subtile(row, parameters, band_to_analyse):
-    
-    series = dict()
-    
-    src_ds = gdal.Open(get_vsi_url(row.enclosure, 
-                                   parameters['username'], 
-                                   parameters['api_key']))
-    
-    bands = dict()
-
-    for band in range(src_ds.RasterCount):
-
-        band += 1
-        bands[src_ds.GetRasterBand(band).GetDescription()] = band 
-        
-    vsi_mem = '/vsimem/t.tif'
-   
-    gdal.Translate(vsi_mem, 
-                   src_ds,
-                   srcWin=[row.start_x, row.start_y, row.cols, row.rows])
-    
-    ds_mem = gdal.Open(vsi_mem)
-    
-    if ds_mem is None:
-        raise
-
-    # get the geocoding for the sub-tile
-    series['geo_transform'] = [ds_mem.GetGeoTransform()]
-    series['projection'] = ds_mem.GetProjection()
-    series['SCL']= np.array(ds_mem.GetRasterBand(bands['SCL']).ReadAsArray())
-    series['SCL_mask'] = ((series['SCL'] == 2) | (series['SCL'] == 4) | (series['SCL'] == 5) | (series['SCL'] == 6) |(series['SCL'] == 7) | (series['SCL'] == 10) | (series['SCL'] == 11))
-    if band_to_analyse == 'NDVI':
-        
-        for band in ['B04', 'B08']:
-            # read the data
-            series[band] = np.array(ds_mem.GetRasterBand(bands[band]).ReadAsArray(),np.float32)
-
-        # NDVI calculation done by lazy evaluation structure lambda to avoid division-by-zero  
-        # NDVI<-0.2 set to noData
-        ndvi = lambda x,y,z: -3000 if(x+y)==0 or z==False  else (-3000 if ((x-y)/float(x+y))<-0.2 else (x-y)/float(x+y))
-        vfunc = np.vectorize(ndvi, otypes=[np.float])
-        series['NDVI']=vfunc(series['B08'] ,series['B04'],series['SCL_mask'] )
-
-        
-
-
-
-        # remove the no longer needed bands
-
-        for band in ['B04', 'B08']:
-            series.pop(band, None)
-
-    else:
-
-        # read the band as float as it is required in filter     
-        band_data = np.array(ds_mem.GetRasterBand(bands[band_to_analyse]).ReadAsArray(),np.float32)
-
-        #noData value for other bands set to zero
-        masked_band = lambda x,y : x if y else 0
-        vfunc_masked = np.vectorize(masked_band, otypes=[np.float])
-        series[band_to_analyse]=vfunc_masked(band_data, series['SCL_mask'])
-        #series[band_to_analyse] = np.where(series['SCL_mask'], series[band_to_analyse], 0)
-    
-
-    ds_mem.FlushCache()
+    series['ul_x'] = ulx
+    series['ul_y'] = uly
+    series['lr_x'] = lrx
+    series['lr_y'] = lry
 
     return pd.Series(series)
+
 
 def fromjulian(x):
     """
@@ -223,7 +106,7 @@ def generate_dates(startdate_string=None, enddate_string=None, delta=5):
 
 
 
-def whittaker(ts, date_mask, band_to_analyse):
+def whittaker(ts, date_mask):
     """
     Apply the whittaker smoothing to a 1d array of floating values.
     Args:
@@ -232,10 +115,9 @@ def whittaker(ts, date_mask, band_to_analyse):
     Returns:
         list of floating values. The first value is the s smoothing parameter
     """
-    if band_to_analyse == "NDVI":
-        nan_value = 255
-    else:
-        nan_value = 0
+
+    nan_value = 255
+
         
     ts_double=np.array(ts,dtype='double')
     mask = np.ones(len(ts))
@@ -244,7 +126,7 @@ def whittaker(ts, date_mask, band_to_analyse):
     data_smooth = np.array([nan_value]*len(date_mask))
     
     # check if all values are np.npn
-    if (mask==0).all()==False:
+    if np.sum(mask)>0:
 
         w=np.array((ts!=nan_value)*1,dtype='double')
         lrange = array.array('d', np.linspace(-2, 4, 61))
@@ -288,29 +170,3 @@ def whittaker(ts, date_mask, band_to_analyse):
 
     return tuple(np.append(np.append(loptv,lag1), data_smooth))
 
-def cog(input_tif, output_tif,no_data=None):
-    
-    translate_options = gdal.TranslateOptions(gdal.ParseCommandLine('-co TILED=YES ' \
-                                                                    '-co COPY_SRC_OVERVIEWS=YES ' \
-                                                                    '-co COMPRESS=LZW '))
-    
-    if no_data != None:
-        translate_options = gdal.TranslateOptions(gdal.ParseCommandLine('-co TILED=YES ' \
-                                                                        '-co COPY_SRC_OVERVIEWS=YES ' \
-                                                                        '-co COMPRESS=LZW '\
-                                                                        '-a_nodata {}'.format(no_data)))
-    ds = gdal.Open(input_tif, gdal.OF_READONLY)
-
-    gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
-    ds.BuildOverviews('NEAREST', [2,4,8,16,32])
-    
-    ds = None
-
-    ds = gdal.Open(input_tif)
-    gdal.Translate(output_tif,
-                   ds, 
-                   options=translate_options)
-    ds = None
-
-    os.remove('{}.ovr'.format(input_tif))
-    os.remove(input_tif)
