@@ -55,7 +55,7 @@ def main():
     
     search_params['start'] = ciop.getparam('series_startdate')
     search_params['stop'] = ciop.getparam('series_enddate')
-    search_params['q'] = 'S3*_OL_2_LFR____*'
+    search_params['q'] = ciop.getparam('tile_id')
     
 
     
