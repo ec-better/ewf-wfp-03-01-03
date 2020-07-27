@@ -1,49 +1,45 @@
 <?xml version="1.0" encoding="us-ascii"?>
 <application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" id="application">
   <jobTemplates>
-    <jobTemplate id="tiling">
-      <streamingExecutable>/application/tiling/run</streamingExecutable>
+    <jobTemplate id="framing_up">
+      <streamingExecutable>/application/framing_up/run</streamingExecutable>
        <defaultParameters>
-            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime"></parameter>
-            <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
+           <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">better-wfp-03-01-03</parameter>
+           <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime">AKCp5ekcV3h4E4ePJ1b1yHSoqB4ZpFUkmYrTg6KSY5CPuaUiFhnvFtoohbgP9zZ9eebkQKkoA</parameter>
+           <parameter id='input_endpoint' title='Input endpoint' abstract='Data pipeline to select input products from' scope="runtime">https://catalog.terradue.com/better-wfp-03-01-01/search</parameter>
+           <parameter id='series_start_date' title='Series startdate' abstract='sereies startdate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-01T00:00Z</parameter>
+           <parameter id='series_enddate' title='Series enddate' abstract='sereies enddate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-20T23:59:59.99Z</parameter>
+           <parameter id='tile_id' title='tile_id' abstract='tile_id' scope="runtime">S3*_OL_2_LFR____*</parameter>
        </defaultParameters>
        <defaultJobconf>
     	<property id="ciop.job.max.tasks">1</property>
         <property id="mapred.task.timeout">9900000000</property>
        </defaultJobconf>
     </jobTemplate>
-    <jobTemplate id="subtile">
-      <streamingExecutable>/application/subtile/run</streamingExecutable>
+    <jobTemplate id="filtering">
+      <streamingExecutable>/application/filtering/run</streamingExecutable>
+        <defaultParameters>
+            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">better-wfp-03-01-03</parameter>
+            <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime">AKCp5ekcV3h4E4ePJ1b1yHSoqB4ZpFUkmYrTg6KSY5CPuaUiFhnvFtoohbgP9zZ9eebkQKkoA</parameter>
+            <parameter id='delta_day' title='Ouput Delta Day' abstract='Day Distance for results' scope="runtime">3</parameter>
+       </defaultParameters>
       <defaultJobconf>
-        <property id="mapred.task.timeout">9900000000</property>
-      </defaultJobconf>
-    </jobTemplate>
-    <jobTemplate id="merge">
-      <streamingExecutable>/application/merge/run</streamingExecutable>
-      <defaultJobconf>
-    	<property id="ciop.job.max.tasks">1</property>
         <property id="mapred.task.timeout">9900000000</property>
       </defaultJobconf>
     </jobTemplate>
   </jobTemplates>
-    <workflow id="ewf-wfp-03-01-03" title="Smoothed & gap-filled Sentinel-3 OLCI Level-2 Land Products" abstract="Smoothed & gap-filled Sentinel-3 OLCI Level-2 Land Products">
+    <workflow id="ewf-wfp-03-01-03" title="Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products" abstract="Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products">
     <workflowVersion>1.0</workflowVersion>
-    <node id="node_tiling">
-      <job id="tiling"/>
+    <node id="node_framing">
+      <job id="framing_up"/>
       <sources>
-        <source id="source" title="Sentinel-3 A|B OLCI Level-2 full resolution products" abstract="List of comma-separated Sentinel-3 A|B OLCI Level-2 OL_2_LFR" refid="string:list" scope="runtime"></source>
+        <source id="source" title="dummy source" abstract="dummy" refid="string:list" scope="test">dummy</source>
       </sources>
     </node>
-    <node id="node_subtile">
-      <job id="subtile"/>
+    <node id="node_filtering">
+      <job id="filtering"/>
       <sources>
-        <source refid="wf:node">node_tiling</source>
-      </sources>
-    </node>
-    <node id="node_merge">
-      <job id="merge"/>
-      <sources>
-        <source refid="wf:node">node_subtile</source>
+        <source refid="wf:node">node_framing</source>
       </sources>
     </node>
   </workflow>

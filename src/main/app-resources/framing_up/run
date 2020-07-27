@@ -1,0 +1,125 @@
+#!/opt/anaconda/envs/env_ewf_wfp_03_01_03/bin/python
+#########
+## This node recieves input params to opensearch the catalogue - various tiles 
+## GDAL opens and get the GeoTransform data per tile
+## Groups tiles according to geometry and sort by date 
+## publishes each group as a pickle file containing panda DataFrame 
+#########
+import os
+import sys
+import string
+import atexit
+import gdal
+gdal.UseExceptions()
+
+import cioppy 
+ciop = cioppy.Cioppy()
+import pandas as pd
+sys.path.append('/'.join([os.environ['_CIOP_APPLICATION_PATH'], 'util']))
+sys.path.append('../util')
+from s3_whittaker_helpers import *
+# define the exit codes
+SUCCESS = 0
+ERR_RESOLUTION = 10
+ERR_STAGEIN = 20
+ERR_NO_OUTPUT = 30
+
+# add a trap to exit gracefully
+def clean_exit(exit_code):
+    log_level = 'INFO'
+    if exit_code != SUCCESS:
+        log_level = 'ERROR'  
+   
+    msg = {SUCCESS: 'Processing successfully concluded',
+           ERR_RESOLUTION: 'Could not resolve Sentinel-1 product enclosure',
+           ERR_STAGEIN: 'Could not stage-in Sentinel-1 product', 
+           ERR_NO_OUTPUT: "Missing output"
+    }
+ 
+    ciop.log(log_level, msg[exit_code])  
+
+def main():
+    
+    ciop = cioppy.Cioppy()
+    os.chdir(ciop.tmp_dir)
+    data_pipeline_parameters = dict()
+    
+    data_pipeline_parameters['username'] = ciop.getparam('_T2Username')
+    data_pipeline_parameters['api_key'] = ciop.getparam('_T2ApiKey')
+
+    data_pipeline_parameters['input_endpoint'] = ciop.getparam('input_endpoint')
+    
+    #### Search Params
+ 
+    search_params = dict()
+    
+    search_params['start'] = ciop.getparam('series_startdate')
+    search_params['stop'] = ciop.getparam('series_enddate')
+    search_params['q'] = ciop.getparam('tile_id')
+    
+
+    
+    
+    search_params['cat'] =  '!dataitem'
+    search_params['count'] = 'unlimited'
+    
+    
+    creds = '{}:{}'.format(data_pipeline_parameters['username'],
+                           data_pipeline_parameters['api_key'])
+
+    search_input = pd.DataFrame(ciop.search(end_point=data_pipeline_parameters['input_endpoint'],
+                                      params=search_params,
+                                      output_fields='self,startdate,enclosure,title',
+                                      model='GeoTime',
+                                      timeout=1200000,
+                                      creds=creds))
+    
+    
+    search_input.columns=['self','startdate','enclosure','title']
+    search_input.drop(search_input[search_input.apply(lambda row: '.properties' in row['enclosure'], axis=1)].index, inplace=True)
+    search_input = search_input.reset_index(drop=True)
+    # Why some entries do not have startdate?!!
+    input_products = search_input[search_input['startdate']!= ''].reset_index(drop=True)
+    input_products = input_products.merge(input_products.apply(lambda row: analyse_row(row), axis=1),
+                                                        left_index=True,
+                                                        right_index=True)
+    #Group by col-row
+    pix_indices = input_products['col-row'].unique().tolist()
+
+    for pix_index in pix_indices[:4]:
+        stack = input_products[input_products['col-row'] == pix_index].reset_index(drop=True)
+        stack_unique = stack.drop_duplicates(subset=['startdate'], keep="first", inplace=False)
+        stack_unique.sort_values(by=['jday'],inplace=True, ignore_index=True)
+        stack_name = '{}_{}_{}'.format((stack_unique.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
+                                        stack_unique.iloc[0]['startdate'][:10],
+                                        stack_unique.iloc[-1]['startdate'][:10])
+        for band in ['NDVI','OGVI', 'OTCI']:
+
+            stack_unique.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
+            ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack_unique.self.count(),
+                                                                                                                  stack_unique.iloc[0]['title'].split('L:')[1][:2],
+                                                                                                                  pix_index,
+                                                                                                                  stack_unique.iloc[0]['startdate'][:10],
+                                                                                                                  stack_unique.iloc[-1]['startdate'][:10],
+                                                                                                                  band))
+           
+            
+    for file in os.listdir(ciop.tmp_dir):
+        if '.pkl' in file:
+            ciop.publish(os.path.join(ciop.tmp_dir, file))
+
+
+
+
+
+                                                                                                                                        
+                                                                                                                                        
+                                                                                                                                        
+try:
+    main()
+except SystemExit as e:
+    if e.args[0]:
+        clean_exit(e.args[0])
+    raise
+else:
+    atexit.register(clean_exit, 0)
