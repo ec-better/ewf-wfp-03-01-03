@@ -49,6 +49,13 @@ def main():
 
     data_pipeline_parameters['input_endpoint'] = ciop.getparam('input_endpoint')
     
+    if 'better-wfp-03-01-01' in data_pipeline_parameters['input_endpoint']:
+        bands_to_interpolate_list = ['NDVI','OGVI', 'OTCI']
+        ciop.log('DEBUG','The application will be launched for S3 OLCI data types on bands: {}'.format(bands_to_interpolate_list))
+        
+    else:
+        bands_to_interpolate_list = ['NDVI']
+        ciop.log('DEBUG','The application will be launched for S3 SLSTR data types on bands: {}'.format(bands_to_interpolate_list))
     #### Search Params
  
     search_params = dict()
@@ -87,14 +94,15 @@ def main():
     #Group by col-row
     pix_indices = input_products['col-row'].unique().tolist()
 
-    for pix_index in pix_indices[:4]:
+    for pix_index in pix_indices:
         stack = input_products[input_products['col-row'] == pix_index].reset_index(drop=True)
-        stack_unique = stack.drop_duplicates(subset=['startdate'], keep="first", inplace=False)
+        stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
         stack_unique.sort_values(by=['jday'],inplace=True, ignore_index=True)
         stack_name = '{}_{}_{}'.format((stack_unique.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
                                         stack_unique.iloc[0]['startdate'][:10],
                                         stack_unique.iloc[-1]['startdate'][:10])
-        for band in ['NDVI','OGVI', 'OTCI']:
+        
+        for band in bands_to_interpolate_list:
 
             stack_unique.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
             ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack_unique.self.count(),

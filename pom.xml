@@ -11,7 +11,7 @@
     <version>1.2</version>
   </parent>
   <description>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
-  <version>0.2</version>
+  <version>0.3</version>
   <properties>
     <summary>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</summary>
     <description>Smoothed and gap-filled Sentinel-3 OLCI Level-2 Land Products</description>
