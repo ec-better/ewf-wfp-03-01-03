@@ -205,16 +205,16 @@ def main():
         ds = drv.Create('temp_lag1.tif'.format(band_to_process,tile_name), 
                         cols, rows, 
                         band_number, 
-                        gdal.GDT_Int16)
+                        gdal.GDT_Float32)
 
-        lag1_scale100 = lambda x: 255 if np.isnan(x) or np.isinf(x) or x==255  else x*100
-        vfunc_lag1_scale100 = np.vectorize(lag1_scale100)
+        #lag1_scale100 = lambda x: 255 if np.isnan(x) or np.isinf(x) or x==255  else x*100
+        #vfunc_lag1_scale100 = np.vectorize(lag1_scale100)
        
         
         
         ds.SetGeoTransform(geo_transform)
         ds.SetProjection(projection)
-        ds.GetRasterBand(1).WriteArray(vfunc_lag1_scale100(result[1]), 0, 0)
+        ds.GetRasterBand(1).WriteArray(result[1], 0, 0)
         ds.GetRasterBand(1).SetDescription('lag1')
         
         ###Metadata for lag1 
