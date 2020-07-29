@@ -207,7 +207,7 @@ def main():
                         band_number, 
                         gdal.GDT_Int16)
 
-        lag1_scale100 = lambda x: 0 if np.isnan(x) else x*100
+        lag1_scale100 = lambda x: 255 if np.isnan(x) or np.isinf(x) or x==255  else x*100
         vfunc_lag1_scale100 = np.vectorize(lag1_scale100)
        
         
