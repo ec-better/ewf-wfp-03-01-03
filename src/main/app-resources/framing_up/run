@@ -50,7 +50,9 @@ def main():
     data_pipeline_parameters['input_endpoint'] = ciop.getparam('input_endpoint')
     
     if 'better-wfp-03-01-01' in data_pipeline_parameters['input_endpoint']:
-        bands_to_interpolate_list = ['NDVI','OGVI', 'OTCI']
+        #bands_to_interpolate_list = ['NDVI','OGVI', 'OTCI']
+        #Temporarily drop OTCI band 
+        bands_to_interpolate_list = ['NDVI','OGVI']
         ciop.log('DEBUG','The application will be launched for S3 OLCI data types on bands: {}'.format(bands_to_interpolate_list))
         
     else:
