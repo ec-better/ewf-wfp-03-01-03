@@ -115,9 +115,14 @@ def whittaker(ts, date_mask):
     Returns:
         list of floating values. The first value is the s smoothing parameter
     """
-
     nan_value = 255
-
+#    filter_input = lambda x: x if x>=-1 and x<=1  else nan_value
+#    vfunc_filter_input=np.vectorize(filter_input)
+    
+#    if band_to_process=='NDVI':
+#        ts_double=np.array(vfunc_filter_input(ts),dtype='double')
+#    else:
+#        ts_double=np.array(ts,dtype='double')
         
     ts_double=np.array(ts,dtype='double')
     mask = np.ones(len(ts))

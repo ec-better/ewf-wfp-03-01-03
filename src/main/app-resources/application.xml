@@ -6,10 +6,10 @@
        <defaultParameters>
            <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">better-wfp-03-01-03</parameter>
            <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
-           <parameter id='input_endpoint' title='Input endpoint' abstract='Data pipeline to select input products from' scope="runtime">https://catalog.terradue.com/better-wfp-03-01-02/search</parameter>
+           <parameter id='input_endpoint' title='Input endpoint' abstract='Data pipeline to select input products from' scope="runtime">https://catalog.terradue.com/better-wfp-03-01-01/search</parameter>
            <parameter id='series_startdate' title='Series startdate' abstract='sereies startdate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-01T00:00:00Z</parameter>
-           <parameter id='series_enddate' title='Series enddate' abstract='sereies enddate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-20T23:59:59.99Z</parameter>
-           <parameter id='tile_id' title='tile_id' abstract='tile_id' scope="runtime"></parameter>
+           <parameter id='series_enddate' title='Series enddate' abstract='sereies enddate in YYYY-mm-ddTHH:MM:SSZ format' scope="runtime">2019-01-31T23:59:59.99Z</parameter>
+           <parameter id='tile_id' title='tile_id' abstract='tile_id' scope="runtime">S3*_OL_2_LFR___*</parameter>
        </defaultParameters>
        <defaultJobconf>
     	<property id="ciop.job.max.tasks">1</property>
@@ -21,7 +21,7 @@
         <defaultParameters>
             <parameter id='_T2Username' title='Username' abstract='Username' scope="runtime">better-wfp-03-01-03</parameter>
             <parameter id='_T2ApiKey' title='API key' abstract='API key' scope="runtime"></parameter>
-            <parameter id='delta_day' title='Ouput Delta Day' abstract='Day Distance for results' scope="runtime">3</parameter>
+            <parameter id='delta_day' title='Ouput Delta Day' abstract='Day Distance for results' scope="runtime">5</parameter>
        </defaultParameters>
       <defaultJobconf>
         <property id="mapred.task.timeout">9900000000</property>
