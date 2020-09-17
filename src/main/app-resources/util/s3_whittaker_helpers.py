@@ -47,13 +47,18 @@ def analyse_row(row):
 
 
 
-def analyse_gps(row, user, api_key):
+def analyse_gps(row, user, api_key , band_number):
             
     enclosure_vsi_url = get_vsi_url(row.enclosure, 
                                     user, 
                                     api_key)
     data_gdal = gdal.Open(enclosure_vsi_url)
-    
+    band=data_gdal.GetRasterBand(band_number).ReadAsArray()
+#    if band.max()==band.min(): 
+#        full_no_data='Y'
+#    else:
+#        full_no_data='N'
+            
     ulx, xres, xskew, uly, yskew, yres  = data_gdal.GetGeoTransform()
     lrx = ulx + (data_gdal.RasterXSize * xres)
     lry = uly + (data_gdal.RasterYSize * yres)
@@ -64,7 +69,7 @@ def analyse_gps(row, user, api_key):
     series['ul_y'] = uly
     series['lr_x'] = lrx
     series['lr_y'] = lry
-
+#    series['allNoData'] = full_no_data
     return pd.Series(series)
 
 
