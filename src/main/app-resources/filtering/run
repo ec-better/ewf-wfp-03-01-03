@@ -53,7 +53,10 @@ def main():
     for input in sys.stdin:
         tile_pkl = ciop.copy(input.rstrip(),ciop.tmp_dir,extract=False)
         tile_series = pd.read_pickle(tile_pkl, 'gzip')
+
         
+        
+
         tile_name = os.path.basename(tile_pkl).split('.')[0]
         ciop.log('DEBUG', 'Processing local tile {}'.format(tile_name))
         
@@ -61,18 +64,7 @@ def main():
         band_to_process = tile_name[-4:]
         ciop.log('DEBUG','band to process is : {}'.format(band_to_process))
         
-        dates = tile_series['jday']
         
-        # the generate_dates function creates a list of days with a delta time=1
-        full_dates = generate_dates(startdate_string=list(dates)[0], enddate_string=list(dates)[-1], delta=1)
-        # Parameter to be set in metadata 
-        full_period = '{}_{}'.format(fromjulian(full_dates[0]).strftime('%Y%m%d'),fromjulian(full_dates[-1]).strftime('%Y%m%d'))
-        date_mask = np.array([True if x in list(dates) else False for x in full_dates])
-        
-        ciop.log('DEBUG','full dates = {0} while original input dates = {1}'.format(len(full_dates), len(dates)))
-        ciop.log('DEBUG','full period of processing is : {}'.format(full_period))
-        
-        #########Read input data & stack them into a 3D array
         ####Find out bands description:
         temp_des = gdal.Open(get_vsi_url(tile_series.iloc[0]['enclosure'], 
                                     data_pipeline_parameters['username'], 
@@ -89,13 +81,31 @@ def main():
         temp_des = None
 
         ciop.log('DEBUG','bands : {}'.format(bands))
-        
-        
         #### Find upperLeft & lowerRight GPS coordinates for each input entry
         tile_series = tile_series.merge(tile_series.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
-                                    data_pipeline_parameters['api_key']), axis=1),
+                                    data_pipeline_parameters['api_key'],bands[band_to_process]), axis=1),
                                                         left_index=True,
                                                         right_index=True)
+        
+        
+        
+
+        dates = tile_series['jday']
+        
+        # the generate_dates function creates a list of days with a delta time=1
+        full_dates = generate_dates(startdate_string=list(dates)[0], enddate_string=list(dates)[-1], delta=1)
+        # Parameter to be set in metadata 
+        full_period = '{}_{}'.format(fromjulian(full_dates[0]).strftime('%Y%m%d'),fromjulian(full_dates[-1]).strftime('%Y%m%d'))
+        date_mask = np.array([True if x in list(dates) else False for x in full_dates])
+        
+        ciop.log('DEBUG','full dates = {0} while original input dates = {1}'.format(len(full_dates), len(dates)))
+        ciop.log('DEBUG','full period of processing is : {}'.format(full_period))
+        
+        #########Read input data & stack them into a 3D array
+
+        
+        
+
         
         #### Check if all tiles have same geometry 
         
@@ -114,6 +124,7 @@ def main():
  
         data = []
         mask = []
+        
         for index, row in tile_series.iterrows():
             
             enclosure_vsi_url = get_vsi_url(row.enclosure, 
@@ -126,12 +137,15 @@ def main():
             cloud_mask = src_ds.GetRasterBand(bands['Cloud mask']).ReadAsArray()
             #noData 255
             mask.append( (land_mask==1) & (cloud_mask==0) ) # if mask is true data is valid
-
+            
 
             
             
         data_stack = np.stack(data,axis=0)
         validity_mask_stack = np.stack(mask,axis=0)
+        #added land mask to perpetually discard non-land pixels
+        land_mask = np.stack(land_mask,axis=0)
+        
         ciop.log('DEBUG','Complete data stack shape = {}'.format(data_stack.shape))
         
         #########Run Whittaker filter 
@@ -261,12 +275,12 @@ def main():
         
         
         scale10k = lambda x: -20000 if x==255 else x*10000
-        vfunc_scale = np.vectorize(scale10k,otypes=[np.int16])
+        vfunc_scale = np.vectorize(scale10k)
 
         
         for index, band in enumerate(range(0, band_number)):
 
-            
+            ciop.log('DEBUG', 'date for index {} is {} '.format(index,dates[index]))
             product_date = datetime.datetime.strptime(dates[index], '%Y%j').date()
             date = '{}{:02d}{:02d}'.format(product_date.year, product_date.month, product_date.day)
             
@@ -377,8 +391,15 @@ def main():
         ds = gdal.Open('temp_{}.tif'.format(band_to_process), gdal.OF_UPDATE)
 
         delta_day_index=0
-        
-        scale10k_conditioned = lambda x: -20000 if np.isnan(x) or np.isinf(x) or x==255 else x*10000
+ ########################### Trim & Scale        
+        if band_to_process == 'OTCI':
+            min_value=0
+            max_value=6.5
+        else:
+            min_value=-1
+            max_value=1
+##########################            
+        scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x>max_value or x<min_value or x==255 else x*10000
         vfunc_scale_con = np.vectorize(scale10k_conditioned)
                 
 
@@ -406,6 +427,7 @@ def main():
             ### NAT & SYN bands 
 
             ds.GetRasterBand(delta_day_index).WriteArray(vfunc_scale_con(result[index + 2]), 0, 0)
+            #ds.GetRasterBand(delta_day_index).WriteArray(result[index + 2], 0, 0)
             if band_is_interpolated=='True':
                 ds.GetRasterBand(delta_day_index).SetDescription('SYN {}'.format(date))
             else:
