@@ -8,10 +8,10 @@ import numpy as np
 import gdal
 import osr
 import urllib.parse as urlparse
-#from urlparse import urlparse
+
 import pandas as pd
 import datetime
-#from whittaker import ws2d, ws2doptv, ws2doptvp, lag1corr
+
 from vam.whittaker import ws2d, ws2doptv, ws2doptvp, lag1corr
 from itertools import chain
 import cioppy
@@ -47,17 +47,13 @@ def analyse_row(row):
 
 
 
-def analyse_gps(row, user, api_key , band_number):
+def analyse_gps(row, user, api_key ):
             
     enclosure_vsi_url = get_vsi_url(row.enclosure, 
                                     user, 
                                     api_key)
     data_gdal = gdal.Open(enclosure_vsi_url)
-    band=data_gdal.GetRasterBand(band_number).ReadAsArray()
-#    if band.max()==band.min(): 
-#        full_no_data='Y'
-#    else:
-#        full_no_data='N'
+
             
     ulx, xres, xskew, uly, yskew, yres  = data_gdal.GetGeoTransform()
     lrx = ulx + (data_gdal.RasterXSize * xres)
@@ -69,7 +65,7 @@ def analyse_gps(row, user, api_key , band_number):
     series['ul_y'] = uly
     series['lr_x'] = lrx
     series['lr_y'] = lry
-#    series['allNoData'] = full_no_data
+
     return pd.Series(series)
 
 
@@ -121,13 +117,7 @@ def whittaker(ts, date_mask):
         list of floating values. The first value is the s smoothing parameter
     """
     nan_value = 255
-#    filter_input = lambda x: x if x>=-1 and x<=1  else nan_value
-#    vfunc_filter_input=np.vectorize(filter_input)
-    
-#    if band_to_process=='NDVI':
-#        ts_double=np.array(vfunc_filter_input(ts),dtype='double')
-#    else:
-#        ts_double=np.array(ts,dtype='double')
+
         
     ts_double=np.array(ts,dtype='double')
     mask = np.ones(len(ts))

@@ -39,6 +39,14 @@ def clean_exit(exit_code):
     ciop.log(log_level, msg[exit_code])  
 
 def main():
+        #####Remove old workspaces- x VM tests
+    try:
+        for d in [x for x in os.listdir('/tmp') if 'workspace' in x]:
+            ciop.log('DEBUG','Removing /tmp/{}'.format(d))
+            shutil.rmtree('/tmp/{}'.format(d))
+    except:
+        pass   
+    #####
     
     ciop = cioppy.Cioppy()
     os.chdir(ciop.tmp_dir)
@@ -98,23 +106,34 @@ def main():
     #Group by col-row
     pix_indices = input_products['col-row'].unique().tolist()
     
-    for pix_index in pix_indices:
+    for pix_index in pix_indices[:4]:
         stack = input_products[input_products['col-row'] == pix_index].reset_index(drop=True)
-        stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
-        stack_unique.sort_values(by=['jday'],inplace=True, ignore_index=True)
-        stack_name = '{}_{}_{}'.format((stack_unique.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
+        stack = stack.merge(stack.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
+                                    data_pipeline_parameters['api_key']), axis=1),
+                                                        left_index=True,
+                                                        right_index=True)
+        if (stack['ul_x'].nunique() ==1 and 
+            stack['ul_y'].nunique() ==1 and 
+            stack['lr_x'].nunique() ==1 and 
+            stack['lr_y'].nunique() ==1) :
+            stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
+            stack_unique.sort_values(by=['jday'],inplace=True, ignore_index=True)
+        
+            stack_name = '{}_{}_{}'.format((stack_unique.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
                                         stack_unique.iloc[0]['startdate'][:10],
                                         stack_unique.iloc[-1]['startdate'][:10])
         
-        for band in bands_to_interpolate_list:
+            for band in bands_to_interpolate_list:
 
-            stack_unique.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
-            ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack_unique.self.count(),
+                stack_unique.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
+                ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack_unique.self.count(),
                                                                                                                   stack_unique.iloc[0]['title'].split('L:')[1][:2],
                                                                                                                   pix_index,
                                                                                                                   stack_unique.iloc[0]['startdate'][:10],
                                                                                                                   stack_unique.iloc[-1]['startdate'][:10],
                                                                                                                   band))
+        else:
+            ciop.log('DEBUG','stack for tile {} dropped since tiles mismatched in size!'.format(stack.iloc[0]['title'][9:18]))
            
             
     for file in os.listdir(ciop.tmp_dir):

@@ -4,7 +4,9 @@
 # each tile containing 6 bands: 'NDVI', 'OGVI', 'OTCI', 'Land mask', 'Cloud mask', 'OGVI fail mask' 
 # Smooth & gap-filters each subtile for NDVI, OGVI or OTCI based on the name of the pickle  
 # Saves the output NDVI, OGVI or OTCI interpolated results + Original Data + Mask   
-# Note! input noData value is 255. 
+# Note! input noData value is 255. output noData value for all smoothed and original data is -20000 
+# noData value for Sgrid is 0 
+# OTCI range [0, 6.5], 10k scaling requires Int32  
 #########
 import os
 import sys
@@ -82,10 +84,10 @@ def main():
 
         ciop.log('DEBUG','bands : {}'.format(bands))
         #### Find upperLeft & lowerRight GPS coordinates for each input entry
-        tile_series = tile_series.merge(tile_series.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
-                                    data_pipeline_parameters['api_key'],bands[band_to_process]), axis=1),
-                                                        left_index=True,
-                                                        right_index=True)
+#        tile_series = tile_series.merge(tile_series.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
+#                                    data_pipeline_parameters['api_key'],bands[band_to_process]), axis=1),
+#                                                        left_index=True,
+#                                                        right_index=True)
         
         
         
@@ -110,11 +112,11 @@ def main():
         #### Check if all tiles have same geometry 
         
 
-        if (tile_series['ul_x'].nunique() >1 or 
-            tile_series['ul_y'].nunique() >1 or 
-            tile_series['lr_x'].nunique() >1 or 
-            tile_series['lr_y'].nunique() >1) :
-            ciop.log('DEBUG','Tile series mismatch in geometry! Process fails!')  
+#        if (tile_series['ul_x'].nunique() >1 or 
+#            tile_series['ul_y'].nunique() >1 or 
+#            tile_series['lr_x'].nunique() >1 or 
+#            tile_series['lr_y'].nunique() >1) :
+#            ciop.log('DEBUG','Tile series mismatch in geometry! Process fails!')  
             
             
 
@@ -144,7 +146,7 @@ def main():
         data_stack = np.stack(data,axis=0)
         validity_mask_stack = np.stack(mask,axis=0)
         #added land mask to perpetually discard non-land pixels
-        land_mask = np.stack(land_mask,axis=0)
+        
         
         ciop.log('DEBUG','Complete data stack shape = {}'.format(data_stack.shape))
         
@@ -252,6 +254,11 @@ def main():
         
         
         ### Creating original values GeoTiff ###
+        if band_to_process == "OTCI": 
+            output_type=gdal.GDT_Int32 
+            
+        else:
+            output_type=gdal.GDT_Int16
         
         ciop.log('INFO', 'Create the original {} GeoTIFF product for local tile {}'.format(band_to_process, tile_name))
         band_number = data_stack.shape[0]
@@ -265,7 +272,7 @@ def main():
         ds = drv.Create('temp_originals.tif',
                         cols, rows, 
                         band_number, 
-                        gdal.GDT_Int16)
+                        output_type)
 
         ds.SetGeoTransform(geo_transform)
         ds.SetProjection(projection)
@@ -382,7 +389,7 @@ def main():
         ds = drv.Create('temp_{}.tif'.format(band_to_process), 
                         cols, rows, 
                         band_number, 
-                        gdal.GDT_Int16)
+                        output_type)
 
         ds.SetGeoTransform(geo_transform)
         ds.SetProjection(projection)
@@ -391,7 +398,7 @@ def main():
         ds = gdal.Open('temp_{}.tif'.format(band_to_process), gdal.OF_UPDATE)
 
         delta_day_index=0
- ########################### Trim & Scale        
+ ########################### Trim & Scale         
         if band_to_process == 'OTCI':
             min_value=0
             max_value=6.5
@@ -400,6 +407,7 @@ def main():
             max_value=1
 ##########################            
         scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x>max_value or x<min_value or x==255 else x*10000
+        #scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x==255 else x*10000
         vfunc_scale_con = np.vectorize(scale10k_conditioned)
                 
 
