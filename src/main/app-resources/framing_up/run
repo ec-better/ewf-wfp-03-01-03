@@ -39,6 +39,14 @@ def clean_exit(exit_code):
     ciop.log(log_level, msg[exit_code])  
 
 def main():
+        #####Remove old workspaces- x VM tests
+#    try:
+#        for d in [x for x in os.listdir('/tmp') if 'workspace' in x]:
+#            ciop.log('DEBUG','Removing /tmp/{}'.format(d))
+#            shutil.rmtree('/tmp/{}'.format(d))
+#    except:
+#        pass   
+    #####
     
     ciop = cioppy.Cioppy()
     os.chdir(ciop.tmp_dir)
@@ -51,11 +59,12 @@ def main():
     
     if 'better-wfp-03-01-01' in data_pipeline_parameters['input_endpoint']:
         bands_to_interpolate_list = ['NDVI','OGVI', 'OTCI']
-        
+        land_mask_band=4
         ciop.log('DEBUG','The application will be launched for S3 OLCI data types on bands: {}'.format(bands_to_interpolate_list))
         
     else:
         bands_to_interpolate_list = ['NDVI']
+        land_mask_band=3
         ciop.log('DEBUG','The application will be launched for S3 SLSTR data types on bands: {}'.format(bands_to_interpolate_list))
     #### Search Params
  
@@ -63,7 +72,7 @@ def main():
     
     search_params['start'] = ciop.getparam('series_startdate')
     search_params['stop'] = ciop.getparam('series_enddate')
-    
+    search_params['geom'] = ciop.getparam('aoi')
     search_params['q'] = ciop.getparam('tile_id')
     
 
@@ -100,21 +109,55 @@ def main():
     
     for pix_index in pix_indices:
         stack = input_products[input_products['col-row'] == pix_index].reset_index(drop=True)
-        stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
-        stack_unique.sort_values(by=['jday'],inplace=True, ignore_index=True)
-        stack_name = '{}_{}_{}'.format((stack_unique.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
-                                        stack_unique.iloc[0]['startdate'][:10],
-                                        stack_unique.iloc[-1]['startdate'][:10])
+        ####Controll if all tiles are same-sized
+        stack = stack.merge(stack.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
+                                    data_pipeline_parameters['api_key']), axis=1),
+                                                        left_index=True,
+                                                        right_index=True)
+        if (stack['ul_x'].nunique() ==1 and 
+            stack['ul_y'].nunique() ==1 and 
+            stack['lr_x'].nunique() ==1 and 
+            stack['lr_y'].nunique() ==1) :
+            #### Manage duplicated tiles 
+            #### Remove duplicates meriting one which contains more data
+            daylist = stack['jday'].unique().tolist()
+            for date in daylist: 
+                stack_x_date = stack[stack.jday==date]
+                if len(stack_x_date)>1:
+                    min_land_covered=1
+                    for index,row in stack_x_date.iterrows():
         
-        for band in bands_to_interpolate_list:
+                        enclosure_vsi_url = get_vsi_url(row.enclosure, 
+                                    data_pipeline_parameters['username'], 
+                                    data_pipeline_parameters['api_key'])
+    
+                        src_ds = gdal.Open(enclosure_vsi_url)
+                        land_mask=np.array(src_ds.GetRasterBand(land_mask_band).ReadAsArray(), dtype= np.uint8)
+                        land_covered=(land_mask==1).sum()/land_mask.size
+                        if land_covered<min_land_covered:
+                            min_land_covered=land_covered
+                            index_drop=index
+                    stack.drop(index_drop , inplace=True)
 
-            stack_unique.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
-            ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack_unique.self.count(),
-                                                                                                                  stack_unique.iloc[0]['title'].split('L:')[1][:2],
+            
+            #stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
+            stack.sort_values(by=['jday'],inplace=True, ignore_index=True)
+        
+            stack_name = '{}_{}_{}'.format((stack.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),
+                                        stack.iloc[0]['startdate'][:10],
+                                        stack.iloc[-1]['startdate'][:10])
+        
+            for band in bands_to_interpolate_list:
+
+                stack.to_pickle(os.path.join(ciop.tmp_dir,'{0}_{1}.pkl'.format(stack_name,band)), 'gzip')
+                ciop.log('DEBUG','Publishing a stack of {0} level {1} tiles on col-row {2} over time period {3} to {4} for {5} band'.format(stack.self.count(),
+                                                                                                                  stack.iloc[0]['title'].split('L:')[1][:2],
                                                                                                                   pix_index,
-                                                                                                                  stack_unique.iloc[0]['startdate'][:10],
-                                                                                                                  stack_unique.iloc[-1]['startdate'][:10],
+                                                                                                                  stack.iloc[0]['startdate'][:10],
+                                                                                                                  stack.iloc[-1]['startdate'][:10],
                                                                                                                   band))
+        else:
+            ciop.log('DEBUG','stack for tile {} dropped since tiles mismatched in size!'.format(stack.iloc[0]['title'][9:18]))
            
             
     for file in os.listdir(ciop.tmp_dir):
