@@ -48,7 +48,7 @@ def analyse_row(row):
 
 
 def analyse_gps(row, user, api_key ):
-            
+    machine_epsilone=np.finfo(float).eps        
     enclosure_vsi_url = get_vsi_url(row.enclosure, 
                                     user, 
                                     api_key)
@@ -61,10 +61,10 @@ def analyse_gps(row, user, api_key ):
 
     series = dict()
 
-    series['ul_x'] = ulx
-    series['ul_y'] = uly
-    series['lr_x'] = lrx
-    series['lr_y'] = lry
+    series['ul_x'] = 0 if abs(ulx)< machine_epsilone else ulx
+    series['ul_y'] = 0 if abs(uly)< machine_epsilone else uly
+    series['lr_x'] = 0 if abs(lrx)< machine_epsilone else lrx
+    series['lr_y'] = 0 if abs(lry)< machine_epsilone else lry
 
     return pd.Series(series)
 

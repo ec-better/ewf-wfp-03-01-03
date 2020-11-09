@@ -59,11 +59,11 @@ def main():
         
         
 
-        tile_name = os.path.basename(tile_pkl).split('.')[0]
+        tile_name = os.path.basename(tile_pkl).split('.')[0][:-5]
         ciop.log('DEBUG', 'Processing local tile {}'.format(tile_name))
         
         #Name of the pickle determines the band ie. NDVI ,OGVI ot OTCI
-        band_to_process = tile_name[-4:]
+        band_to_process = os.path.basename(tile_pkl).split('.')[0][-4:]
         ciop.log('DEBUG','band to process is : {}'.format(band_to_process))
         
         
@@ -83,14 +83,10 @@ def main():
         temp_des = None
 
         ciop.log('DEBUG','bands : {}'.format(bands))
-        #### Find upperLeft & lowerRight GPS coordinates for each input entry
-#        tile_series = tile_series.merge(tile_series.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
-#                                    data_pipeline_parameters['api_key'],bands[band_to_process]), axis=1),
-#                                                        left_index=True,
-#                                                        right_index=True)
+
+
         
-        
-        
+        #########Read input data & stack them into a 3D array        
 
         dates = tile_series['jday']
         
@@ -103,22 +99,7 @@ def main():
         ciop.log('DEBUG','full dates = {0} while original input dates = {1}'.format(len(full_dates), len(dates)))
         ciop.log('DEBUG','full period of processing is : {}'.format(full_period))
         
-        #########Read input data & stack them into a 3D array
 
-        
-        
-
-        
-        #### Check if all tiles have same geometry 
-        
-
-#        if (tile_series['ul_x'].nunique() >1 or 
-#            tile_series['ul_y'].nunique() >1 or 
-#            tile_series['lr_x'].nunique() >1 or 
-#            tile_series['lr_y'].nunique() >1) :
-#            ciop.log('DEBUG','Tile series mismatch in geometry! Process fails!')  
-            
-            
 
         
         
@@ -145,9 +126,7 @@ def main():
             
         data_stack = np.stack(data,axis=0)
         validity_mask_stack = np.stack(mask,axis=0)
-        #added land mask to perpetually discard non-land pixels
-        
-        
+   
         ciop.log('DEBUG','Complete data stack shape = {}'.format(data_stack.shape))
         
         #########Run Whittaker filter 
