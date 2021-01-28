@@ -107,11 +107,13 @@ def main():
     #Group by col-row
     pix_indices = input_products['col-row'].unique().tolist()
     
+    
+
     for pix_index in pix_indices:
         stack = input_products[input_products['col-row'] == pix_index].reset_index(drop=True)
         ####Controll if all tiles are same-sized
         stack = stack.merge(stack.apply(lambda row: analyse_gps(row,data_pipeline_parameters['username'], 
-                                    data_pipeline_parameters['api_key']), axis=1),
+                                    data_pipeline_parameters['api_key'],land_mask_band), axis=1),
                                                         left_index=True,
                                                         right_index=True)
         if (stack['ul_x'].nunique() ==1 and 
@@ -124,23 +126,12 @@ def main():
             for date in daylist: 
                 stack_x_date = stack[stack.jday==date]
                 if len(stack_x_date)>1:
-                    min_land_covered=1
-                    for index,row in stack_x_date.iterrows():
-        
-                        enclosure_vsi_url = get_vsi_url(row.enclosure, 
-                                    data_pipeline_parameters['username'], 
-                                    data_pipeline_parameters['api_key'])
-    
-                        src_ds = gdal.Open(enclosure_vsi_url)
-                        land_mask=np.array(src_ds.GetRasterBand(land_mask_band).ReadAsArray(), dtype= np.uint8)
-                        land_covered=(land_mask==1).sum()/land_mask.size
-                        if land_covered<min_land_covered:
-                            min_land_covered=land_covered
-                            index_drop=index
-                    stack.drop(index_drop , inplace=True)
 
-            
-            #stack_unique = stack.drop_duplicates(subset=['jday'], keep="first", inplace=False)
+                    max_value= stack_x_date.data_content.max()
+                    for index,row in stack_x_date.iterrows():
+                        if row.data_content != max_value:
+                            stack.drop(index , inplace=True)
+
             stack.sort_values(by=['jday'],inplace=True, ignore_index=True)
         
             stack_name = '{}_{}_{}'.format((stack.iloc[0]['title'][:32].replace(' ','_')).replace(':',''),

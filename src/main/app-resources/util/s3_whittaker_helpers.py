@@ -47,7 +47,7 @@ def analyse_row(row):
 
 
 
-def analyse_gps(row, user, api_key ):
+def analyse_gps(row, user, api_key ,land_mask_band):
     machine_epsilone=np.finfo(float).eps        
     enclosure_vsi_url = get_vsi_url(row.enclosure, 
                                     user, 
@@ -58,14 +58,17 @@ def analyse_gps(row, user, api_key ):
     ulx, xres, xskew, uly, yskew, yres  = data_gdal.GetGeoTransform()
     lrx = ulx + (data_gdal.RasterXSize * xres)
     lry = uly + (data_gdal.RasterYSize * yres)
-
+    
+    land_mask=np.array(data_gdal.GetRasterBand(land_mask_band).ReadAsArray(), dtype= np.uint8)
+    land_covered=(land_mask==1).sum()/land_mask.size
+    
     series = dict()
 
     series['ul_x'] = 0 if abs(ulx)< machine_epsilone else ulx
     series['ul_y'] = 0 if abs(uly)< machine_epsilone else uly
     series['lr_x'] = 0 if abs(lrx)< machine_epsilone else lrx
     series['lr_y'] = 0 if abs(lry)< machine_epsilone else lry
-
+    series['data_content'] =  land_covered
     return pd.Series(series)
 
 
