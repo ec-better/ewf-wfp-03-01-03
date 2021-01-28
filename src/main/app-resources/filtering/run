@@ -385,8 +385,9 @@ def main():
             min_value=-1
             max_value=1
 ##########################            
-        scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x>max_value or x<min_value or x==255 else x*10000
-        #scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x==255 else x*10000
+        scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x==255 else x*10000
+        #scale10k_conditioned = lambda x: -20000 if np.isnan(x) or x>max_value or x<min_value or x==255 else x*10000
+
         vfunc_scale_con = np.vectorize(scale10k_conditioned)
                 
 
