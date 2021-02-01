@@ -10,6 +10,7 @@ import sys
 import string
 import atexit
 import gdal
+import numpy as np
 gdal.UseExceptions()
 
 import cioppy 
@@ -50,6 +51,8 @@ def main():
     
     ciop = cioppy.Cioppy()
     os.chdir(ciop.tmp_dir)
+    machine_epsilone = np.finfo(float).eps
+    
     data_pipeline_parameters = dict()
     
     data_pipeline_parameters['username'] = ciop.getparam('_T2Username')
@@ -116,10 +119,10 @@ def main():
                                     data_pipeline_parameters['api_key'],land_mask_band), axis=1),
                                                         left_index=True,
                                                         right_index=True)
-        if (stack['ul_x'].nunique() ==1 and 
-            stack['ul_y'].nunique() ==1 and 
-            stack['lr_x'].nunique() ==1 and 
-            stack['lr_y'].nunique() ==1) :
+        if (stack['ul_x'].var() <= machine_epsilone and 
+            stack['ul_y'].var() <= machine_epsilone and 
+            stack['lr_x'].var() <= machine_epsilone and 
+            stack['lr_y'].var() <= machine_epsilone) :
             #### Manage duplicated tiles 
             #### Remove duplicates meriting one which contains more data
             daylist = stack['jday'].unique().tolist()
